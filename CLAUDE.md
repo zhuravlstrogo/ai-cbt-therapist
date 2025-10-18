@@ -83,6 +83,167 @@ All 4 dependencies are required and minimal:
 - `SpeechRecognition` - Google Speech API client
 - `pydub` - Audio format conversion (requires FFmpeg and PortAudio system packages)
 
+## Change Goal/Problems Flow
+
+### Overview
+Users can modify their therapy goal and/or problems from the main menu button "🎯 Изменить цель/проблемы". This flow allows selective updates with validation and recommendations refresh.
+
+### Architecture
+
+#### Menu Entry Point (universal_menu.py:66-96)
+**`show_change_options()`** - Displays change menu with options:
+- 🎯 Цель терапии (Change goal only)
+- 🧭 Трудности (Change problems only)
+- ↩️ Вернуться в меню (Return to menu)
+
+#### Callback Handler (universal_menu.py:365-393)
+**`handle_change_callback()`** - Routes to goal setting with change flags:
+- `change:goal_only` → `start_goal_setting(..., force_change_goal=True)`
+- `change:problems_only` → `start_goal_setting(..., skip_goal=True, force_change_problems=True)`
+
+### Goal Setting Changes (goal.py:77-153)
+
+**`start_goal_setting()` - Updated Parameters:**
+- `force_change_goal=False` - Force changing goal (clear existing, ask for new)
+- `force_change_problems=False` - Force changing problems (clear existing)
+
+**State Management:**
+- `is_changing` flag set when `force_change_goal` or `force_change_problems` enabled
+- Preserves existing data unless explicitly forcing change
+- Initializes to correct step based on change type:
+  - Force goal: Step 1 (ask for goal)
+  - Force problems: Step 2 (select problems)
+
+### Workflow: Change Goal Only
+1. User clicks "🎯 Цель терапии"
+2. `start_goal_setting(..., force_change_goal=True)` called
+3. Step 1: Bot asks "Какую цель терапии ты перед собой ставишь?"
+4. User enters new goal text
+5. Preview shown: "📝 Твоя цель: {goal_text}"
+6. Options: ✅ Подтвердить / ✏️ Изменить
+7. **If confirmed → Skip to problem rating (Step 3)** with existing problems
+8. After rating: Final preview and **Show exercise recommendations**
+
+### Workflow: Change Problems Only
+1. User clicks "🧭 Трудности"
+2. `start_goal_setting(..., skip_goal=True, force_change_problems=True)` called
+3. Step 2: Show full problem list (ALL problems, not just existing ones)
+4. User selects problems (toggle multiple)
+5. Click ➡️ Продолжить
+6. Step 3: Rate each selected problem (0-3 scale)
+7. Final preview with all ratings
+8. After confirmation: **Show exercise recommendations**
+
+### Key Implementation Details
+
+**Problem Rating Cleanup** (goal.py:375-379)
+- When transitioning from Step 2 to Step 3:
+  - Remove ratings for deselected problems
+  - Preserve ratings for problems kept from previous selection
+  - Ensures clean state for change operation
+
+**Clear Ratings on Change** (goal.py:253-257)
+- When entering problem selection in change mode:
+  - Check `is_changing` flag
+  - Clear all problem ratings
+  - Forces re-rating of all problems during this change operation
+
+**Final Preview Improvement** (goal.py:512-560)
+- Shows "Проблемы не выбраны" if problems list is empty
+- Button text: ✅ Подтвердить (instead of "Да, верно")
+
+### State Persistence Flow
+```
+User Goal/Problem Change
+    ↓
+show_change_options() → Present change menu
+    ↓
+[User selects: Goal or Problems]
+    ↓
+handle_change_callback() → Call start_goal_setting with flags
+    ↓
+start_goal_setting(force_change_goal/force_change_problems=True)
+    ↓
+[User makes changes through normal goal flow]
+    ↓
+handle_preview_confirm(action="yes")
+    ↓
+[Save to user_states in greeting.py]
+    ↓
+show_exercise_recommendations() → Display updated exercises
+```
+
+### Registration
+Handlers registered in `main.py:420`:
+```python
+universal_menu.register_menu_handlers(bot)
+```
+
+This automatically registers both:
+- `menu:` callback handler (existing menu callbacks)
+- `change:` callback handler (new change goal/problems callbacks)
+
+## Exercise Completion Flow
+
+### Overview
+After a user completes all steps and answers the final questions for an exercise, the following sequence occurs:
+
+1. **Final Questions** (exercise.py:624-652)
+   - Three questions asked sequentially:
+     - "Какой инсайт ты получил?" (What insight did you get?)
+     - "Что было полезно?" (What was useful?)
+     - "Что вызвало трудность?" (What was difficult?)
+
+2. **Completion Marker** (exercise.py:665-692)
+   - After all questions answered, user sees: "Отлично! Ты ответил(а) на все вопросы."
+   - Button "✅ Отметить как завершённое" appears
+   - Callback: `ex_mark_complete`
+
+3. **Exercise Finish** (exercise.py:695-722)
+   - Saves all final answers to exercises.xlsx
+   - Shows completion message: "Спасибо! Я записал(а) твой опыт. Это отличная работа! 💪"
+   - Calls `show_next_exercise_options()`
+
+4. **Next Exercise Options** (exercise.py:725-767)
+   - Detects if more exercises remain in the recommendation list
+   - Shows buttons:
+     - "➡️ Следующее упражнение" (if more exercises available)
+     - "📍 Главное меню" (always shown)
+   - State persists for seamless transition to next exercise
+
+### Key Functions
+
+**`show_exercise_completion_options()`** (exercise.py:665-692)
+- Displays completion message and mark-complete button
+- Triggered after final question answered
+
+**`handle_mark_exercise_complete()`** (exercise.py:1162-1182)
+- Callback handler for "✅ Отметить как завершённое" button
+- Calls `finish_exercise()` to save and proceed
+
+**`finish_exercise()`** (exercise.py:695-722)
+- Saves final answers to Excel
+- Shows completion confirmation
+- Transitions to next exercise options
+
+**`show_next_exercise_options()`** (exercise.py:725-767)
+- Determines next exercise in list
+- Displays appropriate buttons based on remaining exercises
+- Preserves state for next exercise selection
+
+**`handle_exercise_select()`** (exercise.py:455-508)
+- Resets execution state when new exercise selected
+- Clears: steps, current_step_idx, final_answers, awaiting flags
+- Ensures clean state for next exercise
+
+### State Management
+
+- Exercise state stored in `user_exercise_states[user_id]`
+- State cleared when:
+  - User returns to main menu (`universal_menu.py:91-94`)
+  - User selects new exercise after completion
+- State preserved when transitioning to next exercise for seamless UX
+
 ## How to Extend
 
 ### Adding a New Message Type Handler
