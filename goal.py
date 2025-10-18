@@ -307,16 +307,16 @@ async def handle_problem_selection(bot, callback_query, problem_id):
     """Handle problem selection toggle"""
     try:
         user_id = callback_query.from_user.id
-        chat_id = callback_query.message.chat.id
+
+        # Answer callback IMMEDIATELY to avoid timeout
+        await bot.answer_callback_query(callback_query.id, show_alert=False)
 
         if user_id not in user_goal_states:
-            await bot.answer_callback_query(callback_query.id, "Сессия истекла")
             return
 
         state = user_goal_states[user_id]
 
         if state['step'] != 2:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         # Find the problem display name
@@ -327,20 +327,16 @@ async def handle_problem_selection(bot, callback_query, problem_id):
                 break
 
         if problem_display is None:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         # Toggle selection
         if problem_display in state['problems']:
             state['problems'].remove(problem_display)
-            await bot.answer_callback_query(callback_query.id, f"❌ Отменено: {problem_display}")
         else:
             state['problems'].append(problem_display)
-            await bot.answer_callback_query(callback_query.id, f"✅ Выбрано: {problem_display}")
 
     except Exception as e:
         print(f"Error handling problem selection: {e}")
-        await bot.answer_callback_query(callback_query.id)
 
 
 async def handle_problems_done(bot, callback_query):
@@ -350,21 +346,21 @@ async def handle_problems_done(bot, callback_query):
         username = callback_query.from_user.username or 'Unknown'
         chat_id = callback_query.message.chat.id
 
+        # Answer callback IMMEDIATELY to avoid timeout
+        await bot.answer_callback_query(callback_query.id, show_alert=False)
+
         if user_id not in user_goal_states:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         state = user_goal_states[user_id]
 
         if state['step'] != 2:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         # Check if at least one problem selected (but allow skipping)
         if not state['problems']:
             # Allow proceeding without selection
             state['step'] = 4  # Skip to completion
-            await bot.answer_callback_query(callback_query.id)
             await finish_goal_setting(bot, chat_id, user_id, username)
             return
 
@@ -377,8 +373,6 @@ async def handle_problems_done(bot, callback_query):
         problems_to_remove = [p for p in state['problem_ratings'].keys() if p not in state['problems']]
         for problem in problems_to_remove:
             del state['problem_ratings'][problem]
-
-        await bot.answer_callback_query(callback_query.id)
 
         # Send step 3 header
         from universal_menu import get_menu_button
@@ -395,7 +389,6 @@ async def handle_problems_done(bot, callback_query):
 
     except Exception as e:
         print(f"Error handling problems done: {e}")
-        await bot.answer_callback_query(callback_query.id)
 
 
 async def show_problem_rating(bot, chat_id, user_id):
@@ -447,14 +440,15 @@ async def handle_problem_rating(bot, callback_query, problem_idx, rating):
         username = callback_query.from_user.username or 'Unknown'
         chat_id = callback_query.message.chat.id
 
+        # Answer callback IMMEDIATELY to avoid timeout
+        await bot.answer_callback_query(callback_query.id, show_alert=False)
+
         if user_id not in user_goal_states:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         state = user_goal_states[user_id]
 
         if state['step'] != 3 or state['current_problem_idx'] != int(problem_idx):
-            await bot.answer_callback_query(callback_query.id)
             return
 
         problem = state['problems'][int(problem_idx)]
@@ -462,8 +456,6 @@ async def handle_problem_rating(bot, callback_query, problem_idx, rating):
 
         # Store rating
         state['problem_ratings'][problem] = rating_value
-
-        await bot.answer_callback_query(callback_query.id, f"Оценка {rating_value} сохранена")
 
         # Move to next problem
         state['current_problem_idx'] += 1
@@ -478,7 +470,6 @@ async def handle_problem_rating(bot, callback_query, problem_idx, rating):
 
     except Exception as e:
         print(f"Error handling problem rating: {e}")
-        await bot.answer_callback_query(callback_query.id)
 
 
 async def handle_rating_back(bot, callback_query, problem_idx):
@@ -487,8 +478,10 @@ async def handle_rating_back(bot, callback_query, problem_idx):
         user_id = callback_query.from_user.id
         chat_id = callback_query.message.chat.id
 
+        # Answer callback IMMEDIATELY to avoid timeout
+        await bot.answer_callback_query(callback_query.id, show_alert=False)
+
         if user_id not in user_goal_states:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         state = user_goal_states[user_id]
@@ -501,18 +494,15 @@ async def handle_rating_back(bot, callback_query, problem_idx):
             state['problems'] = []
             state['problem_ratings'] = {}
 
-            await bot.answer_callback_query(callback_query.id)
             await show_problem_selection(bot, chat_id, user_id)
         else:
             # Go to previous problem for re-rating
             state['current_problem_idx'] = problem_idx - 1
 
-            await bot.answer_callback_query(callback_query.id)
             await show_problem_rating(bot, chat_id, user_id)
 
     except Exception as e:
         print(f"Error handling rating back: {e}")
-        await bot.answer_callback_query(callback_query.id)
 
 
 async def show_final_preview(bot, chat_id, user_id, username):
@@ -600,7 +590,7 @@ async def handle_preview_confirm(bot, callback_query, action):
 
         elif action == "choose":
             # Ask what to change
-            await bot.answer_callback_query(callback_query.id)
+            await bot.answer_callback_query(callback_query.id, show_alert=False)
             change_markup = types.InlineKeyboardMarkup()
 
             btn_goal = types.InlineKeyboardButton(
@@ -629,8 +619,10 @@ async def handle_preview_change(bot, callback_query, change_type):
         user_id = callback_query.from_user.id
         chat_id = callback_query.message.chat.id
 
+        # Answer callback IMMEDIATELY to avoid timeout
+        await bot.answer_callback_query(callback_query.id, show_alert=False)
+
         if user_id not in user_goal_states:
-            await bot.answer_callback_query(callback_query.id)
             return
 
         state = user_goal_states[user_id]
@@ -639,7 +631,6 @@ async def handle_preview_change(bot, callback_query, change_type):
             # Go back to step 1 - ask for new goal
             state['step'] = 1
             state['goal'] = ''
-            await bot.answer_callback_query(callback_query.id)
             from universal_menu import get_menu_button
             markup = get_menu_button()
             await bot.send_message(chat_id, "Введи новую цель терапии:", reply_markup=markup)
@@ -649,12 +640,10 @@ async def handle_preview_change(bot, callback_query, change_type):
             state['step'] = 2
             state['problems'] = []
             state['problem_ratings'] = {}
-            await bot.answer_callback_query(callback_query.id)
             await show_problem_selection(bot, chat_id, user_id)
 
     except Exception as e:
         print(f"Error handling preview change: {e}")
-        await bot.answer_callback_query(callback_query.id)
 
 
 async def finish_goal_setting(bot, chat_id, user_id, username):
