@@ -183,6 +183,21 @@ This automatically registers both:
 - `menu:` callback handler (existing menu callbacks)
 - `change:` callback handler (new change goal/problems callbacks)
 
+### Important: Callback Timeout Prevention
+All callback handlers in the change flow answer the Telegram callback query **immediately** with `show_alert=False`:
+
+```python
+# Answer callback IMMEDIATELY to avoid timeout
+await bot.answer_callback_query(callback_query.id, show_alert=False)
+```
+
+This prevents "query is too old" errors by ensuring responses are sent within Telegram's 30-second timeout window, while processing continues asynchronously. Applied to:
+- `handle_problem_selection()` (goal.py:312)
+- `handle_problems_done()` (goal.py:350)
+- `handle_problem_rating()` (goal.py:444)
+- `handle_rating_back()` (goal.py:482)
+- `handle_preview_change()` (goal.py:623)
+
 ## Exercise Completion Flow
 
 ### Overview
