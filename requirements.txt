@@ -1,0 +1,12 @@
+pyTelegramBotAPI==4.14.0
+python-dotenv==1.0.0
+SpeechRecognition==3.10.0
+pydub==0.25.1
+openpyxl==3.10.0
+
+# System dependencies required:
+# - ffmpeg (for pydub)
+# - portaudio (for speech_recognition)
+# Install them using:
+# Ubuntu/Debian: sudo apt-get install ffmpeg portaudio19-dev
+# macOS: brew install ffmpeg portaudio
