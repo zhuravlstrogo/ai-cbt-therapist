@@ -252,27 +252,13 @@ async def handle_menu_callback(bot, callback_query, menu_action):
 
         elif menu_action == 'my_progress':
             # Show user progress
-            markup = types.InlineKeyboardMarkup()
-            btn_back = types.InlineKeyboardButton(
-                "🔙 Назад в меню",
-                callback_data="menu:show"
-            )
-            markup.add(btn_back)
-
-            progress_text = "📖 Мой прогресс\n\nЭта функция будет вскоре доступна."
-            await bot.send_message(chat_id, progress_text, reply_markup=markup)
+            from my_progress import show_my_progress
+            await show_my_progress(bot, chat_id, user_id, username)
 
         elif menu_action == 'mindfulness':
-            # Show mindfulness practice
-            markup = types.InlineKeyboardMarkup()
-            btn_back = types.InlineKeyboardButton(
-                "🔙 Назад в меню",
-                callback_data="menu:show"
-            )
-            markup.add(btn_back)
-
-            mindfulness_text = "🌙 Майндфулнесс-практика (MBCT)\n\nЭта функция будет вскоре доступна."
-            await bot.send_message(chat_id, mindfulness_text, reply_markup=markup)
+            # Show mindfulness practices
+            from mvst import show_mindfulness_practices
+            await show_mindfulness_practices(bot, chat_id, user_id, username)
 
         elif menu_action == 'diary':
             # Import greeting to get user_name
@@ -286,16 +272,9 @@ async def handle_menu_callback(bot, callback_query, menu_action):
             await show_diary_prompt(bot, chat_id, user_id, username, user_name)
 
         elif menu_action == 'assess_progress':
-            # Show assess progress
-            markup = types.InlineKeyboardMarkup()
-            btn_back = types.InlineKeyboardButton(
-                "🔙 Назад в меню",
-                callback_data="menu:show"
-            )
-            markup.add(btn_back)
-
-            assess_text = "📈 Оценить прогресс\n\nЭта функция будет вскоре доступна."
-            await bot.send_message(chat_id, assess_text, reply_markup=markup)
+            # Show check-in progress
+            from check_in import show_check_in_progress
+            await show_check_in_progress(bot, chat_id, user_id, username)
 
         elif menu_action == 'technical_support':
             # Show technical support contact

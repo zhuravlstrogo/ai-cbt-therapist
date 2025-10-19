@@ -309,3 +309,155 @@ async def handle_photo(message):
 **Import Errors**
 - Run `pip install -r requirements.txt`
 - Verify Python 3.7+ installed (asyncio with full async/await support)
+
+## Mindfulness-Based Cognitive Therapy (MBCT) Practices
+
+### Overview
+Added full MBCT (Mindfulness-Based Cognitive Therapy) practices module accessible from the main menu button "🌙 Майндфулнесс-практика (MBCT)". Users can select from 6 guided mindfulness practices, complete them, provide feedback, and track their sessions.
+
+### Available Practices
+
+1. **3-минутная дыхательная пауза (Breathing Space)** 🌬️
+   - Short "reboot": notice what is, focus on breathing, expand attention
+
+2. **Сканирование тела (Body Scan)** 🧘
+   - Attention travels from head to toes, notice sensations without judgment, develop grounding
+
+3. **Осознанное дыхание (Mindful Breathing)** 🫁
+   - Observe in-breath and out-breath, gently return attention (2–5 minutes)
+
+4. **Осознанная ходьба/движение (Mindful Walking)** 🚶
+   - Notice bodily sensations with each step, train presence in movement
+
+5. **Мысли как мысли (Decentering)** ☁️
+   - Perceive thoughts as mental events (clouds/leaves on water), don't merge with them
+
+6. **Повернуться к трудности (Turning Toward Difficulty)** 💛
+   - Gently meet unpleasant sensations/emotions, breathe nearby, expand attention
+
+### Architecture
+
+#### Core Files
+
+**`mvst.py`** - Main mindfulness practice module (687 lines)
+- Defines 6 MBCT practices with descriptions and emojis
+- Manages user practice states during sessions
+- Handles practice selection, input, and feedback
+
+**Key Functions:**
+- `show_mindfulness_practices()` - Display practice cards with selection buttons
+- `handle_practice_select()` - Handle practice selection and show description
+- `handle_practice_text_input()` - Process user input during practice
+- `show_final_questions()` - Display 3 feedback questions after practice
+- `show_next_practice_options()` - Show remaining practices or return to menu
+- `save_practice_to_excel()` - Store practice data in mvst.xlsx
+
+#### Data Storage
+
+**`mvst.xlsx`** - Excel file tracking practice sessions with columns:
+- User ID, Username, Practice Name, Practice Type
+- Practice Start Time, User Input During Practice
+- What Was Noticed, What Was Useful, What Was Difficult
+- Date/Time
+
+#### Integration Points
+
+**`universal_menu.py`** (Line 258-261)
+- Updated mindfulness button handler to call `show_mindfulness_practices()`
+- Previously showed "coming soon" placeholder
+
+**`main.py`**
+- Line 203-211: Added text message handler for mindfulness practice input
+- Line 486-495: Register MVST handlers on bot startup
+- Initializes mvst.xlsx on first run
+
+### User Flow
+
+```
+User clicks "🌙 Майндфулнесс-практика (MBCT)" in menu
+    ↓
+[Show all 6 practice cards with descriptions and selection buttons]
+    ↓
+User selects a practice → "Начать: [Practice Name]"
+    ↓
+[Display practice description with emoji and full details]
+    ↓
+User can enter notes during practice (optional)
+    ↓
+[Show 3 sequential feedback questions:]
+  1. "Что ты заметил(а) в ходе практики?" (What did you notice?)
+  2. "Что было полезно?" (What was useful?)
+  3. "Что вызвало сложности?" (What was difficult?)
+    ↓
+User confirms each answer (preview: "📝 Вот что ты написал(а)...")
+    ↓
+[Show completion button: "✅ Отметить как завершённое"]
+    ↓
+[Show remaining practices or "All completed!" message]
+    ↓
+User selects next practice OR returns to menu via "📍 Главное меню"
+```
+
+### Key Features
+
+**Practice Selection**
+- All 6 practices shown as individual cards with emoji, name, and full description
+- Each practice has a dedicated "Начать: [Name]" button
+- Menu button always available for navigation
+
+**User Input**
+- Optional text input during practice (store in mvst.xlsx column F)
+- Optional text input for each feedback question
+- Preview system: "📝 Вот что ты написал(а):" with Edit/Confirm buttons
+- Lenient validation: empty answers allowed for mindfulness practices
+
+**Session Tracking**
+- Practice selection logged with timestamp (column E)
+- All feedback answers saved to Excel
+- Completed practices tracked in session state
+- Option to do multiple practices in one session
+
+**Navigation**
+- Menu button (📱 Главное меню) accessible from any practice screen
+- After practice: show next practices with buttons, or main menu button
+- Track completed practices to avoid repetition in same session
+
+### State Management
+
+**`user_mvst_states[user_id]`** tracks:
+- `practices` - List of all 6 practices (dict)
+- `selected_practice` - Current practice being done
+- `completed_practices` - List of practice IDs completed in session
+- `username` - User identifier for Excel logging
+- `awaiting_practice_input` - Flag for text input during practice
+- `awaiting_final_answer` - Flag for feedback question response
+- `pending_practice_input` - Temporary storage for user input
+- `pending_final_answer` - Temporary storage for answer preview
+- `final_answers` - Dict storing 3 feedback answers (0=noticed, 1=useful, 2=difficult)
+- `current_final_question` - Index of current question (0-2)
+- `current_step` - Flow state (selection, practice, questions, completion)
+
+### Callback Handlers
+
+All callback data formats:
+- `mvst_select:{practice_id}` - Select practice (IDs 1-6)
+- `mvst_input_confirm:{action}` - Confirm practice input (yes/edit)
+- `mvst_answer_confirm:{action}` - Confirm feedback answer (yes/edit)
+- `mvst_mark_complete` - Mark practice completed
+
+All callbacks registered in `register_mvst_handlers()` function
+
+### Important: Callback Timeout Prevention
+All callback handlers answer the Telegram callback query **immediately**:
+```python
+await bot.answer_callback_query(callback_query.id, "message", show_alert=False)
+```
+This prevents "query is too old" errors within Telegram's 30-second timeout window.
+
+### Excel Logging
+
+Practice data persists in `mvst.xlsx` with automatic file initialization:
+- Headers created on first run by `init_mvst_excel()`
+- Each practice session creates new row
+- User input and feedback answers added to same row
+- Timestamps recorded for practice start and session completion
