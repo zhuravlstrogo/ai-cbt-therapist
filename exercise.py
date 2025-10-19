@@ -693,6 +693,57 @@ async def show_final_questions(bot, chat_id, user_id):
             return
 
         state = user_exercise_states[user_id]
+        
+        # Check for crisis indicators in all step results
+        from safety_check import check_text_safety, show_crisis_support, log_crisis_detection
+        from greeting import user_states
+        
+        # Combine all step results for safety check
+        all_step_results = []
+        for step_result in state.get('step_results', {}).values():
+            if step_result:
+                all_step_results.append(step_result)
+        
+        # Also check pending step result if exists
+        if state.get('pending_step_result'):
+            all_step_results.append(state['pending_step_result'])
+        
+        if all_step_results:
+            combined_text = " ".join(all_step_results)
+            
+            crisis_detected, crisis_type, confidence = await check_text_safety(
+                text=combined_text,
+                context="exercise"
+            )
+            
+            if crisis_detected and crisis_type:
+                # Log crisis detection
+                username = state.get('username', 'Unknown')
+                await log_crisis_detection(
+                    user_id=user_id,
+                    username=username,
+                    crisis_type=crisis_type,
+                    context="exercise",
+                    text_sample=combined_text[:200],
+                    file_path='exercises.xlsx'
+                )
+                
+                # Get user name
+                user_name = 'Друг'
+                if user_id in user_states:
+                    user_name = user_states[user_id].get('user_name', 'Друг')
+                
+                # Show crisis support
+                await show_crisis_support(
+                    bot=bot,
+                    chat_id=chat_id,
+                    user_name=user_name,
+                    crisis_type=crisis_type,
+                    context="exercise",
+                    continue_after=True  # Allow continuing with final questions
+                )
+                return
+        
         state['current_final_question'] = 0
         state['final_answers'] = {}
 
@@ -1031,6 +1082,42 @@ async def handle_step_input(bot, message, user_id, username, text, state):
             await bot.send_message(message.chat.id, feedback, reply_markup=markup)
             return
 
+        # Check for crisis indicators in step input
+        from safety_check import check_text_safety, show_crisis_support, log_crisis_detection
+        from greeting import user_states
+
+        crisis_detected, crisis_type, confidence = await check_text_safety(
+            text=text,
+            context="exercise"
+        )
+
+        if crisis_detected and crisis_type:
+            # Log crisis detection
+            await log_crisis_detection(
+                user_id=user_id,
+                username=username,
+                crisis_type=crisis_type,
+                context="exercise",
+                text_sample=text[:200],
+                file_path='exercises.xlsx'
+            )
+
+            # Get user name
+            user_name = 'Друг'
+            if user_id in user_states:
+                user_name = user_states[user_id].get('user_name', 'Друг')
+
+            # Show crisis support
+            await show_crisis_support(
+                bot=bot,
+                chat_id=message.chat.id,
+                user_name=user_name,
+                crisis_type=crisis_type,
+                context="exercise",
+                continue_after=True  # Allow continuing with exercise
+            )
+            return
+
         # Store step result temporarily
         state['pending_step_result'] = text
 
@@ -1079,6 +1166,42 @@ async def handle_final_answer_input(bot, message, user_id, username, text, state
             from universal_menu import get_menu_button
             markup = get_menu_button()
             await bot.send_message(message.chat.id, feedback, reply_markup=markup)
+            return
+
+        # Check for crisis indicators in final answer
+        from safety_check import check_text_safety, show_crisis_support, log_crisis_detection
+        from greeting import user_states
+
+        crisis_detected, crisis_type, confidence = await check_text_safety(
+            text=text,
+            context="exercise"
+        )
+
+        if crisis_detected and crisis_type:
+            # Log crisis detection
+            await log_crisis_detection(
+                user_id=user_id,
+                username=username,
+                crisis_type=crisis_type,
+                context="exercise",
+                text_sample=text[:200],
+                file_path='exercises.xlsx'
+            )
+
+            # Get user name
+            user_name = 'Друг'
+            if user_id in user_states:
+                user_name = user_states[user_id].get('user_name', 'Друг')
+
+            # Show crisis support
+            await show_crisis_support(
+                bot=bot,
+                chat_id=message.chat.id,
+                user_name=user_name,
+                crisis_type=crisis_type,
+                context="exercise",
+                continue_after=True  # Allow continuing with final questions
+            )
             return
 
         # Store answer temporarily
@@ -1215,6 +1338,9 @@ async def handle_step_confirm(bot, callback_query, action):
                 user_id, username, selected_exercise, first_problem, first_rating,
                 step_num, step_text, pending_result
             )
+
+            # Store step result for safety checking
+            state['step_results'][current_idx] = pending_result
 
             await bot.answer_callback_query(callback_query.id, "Спасибо! Сохранено.")
 
@@ -1388,4 +1514,71 @@ async def handle_exercise_change_select(bot, callback_query):
 
     except Exception as e:
         print(f"Error handling exercise change selection: {e}")
+        await bot.answer_callback_query(callback_query.id)
+
+
+async def handle_exercise_continue_after_safety(bot, callback_query):
+    """
+    Handle continuing exercise after safety check
+    """
+    try:
+        user_id = callback_query.from_user.id
+        chat_id = callback_query.message.chat.id
+
+        if user_id not in user_exercise_states:
+            await bot.answer_callback_query(callback_query.id)
+            return
+
+        state = user_exercise_states[user_id]
+        await bot.answer_callback_query(callback_query.id)
+
+        # Determine where to continue based on current state
+        if state.get('awaiting_step_input'):
+            # Continue with current step
+            current_idx = state.get('current_step_idx', 0)
+            steps = state.get('steps', [])
+            if current_idx < len(steps):
+                step_num, step_text = steps[current_idx]
+                step_message = f"Шаг {current_idx + 1} из {len(steps)}:\n\n{step_text}"
+                await bot.send_message(chat_id, step_message)
+                
+                from universal_menu import get_menu_button
+                markup = get_menu_button()
+                await bot.send_message(chat_id, "Поделись результатом для этого шага:", reply_markup=markup)
+        
+        elif state.get('awaiting_final_answer'):
+            # Continue with final questions
+            await show_final_question(bot, chat_id, user_id)
+        
+        elif state.get('awaiting_exercise_text'):
+            # Continue with exercise text input
+            from universal_menu import get_menu_button
+            markup = get_menu_button()
+            await bot.send_message(chat_id, "Поделись результатом упражнения:", reply_markup=markup)
+        
+        else:
+            # Default: show exercise selection
+            header_text = "Выбери упражнение:"
+            await bot.send_message(chat_id, header_text)
+
+            for idx, exercise in enumerate(state.get('exercises', [])):
+                goal = extract_exercise_goal(exercise)
+                emoji = EXERCISE_EMOJIS[idx % len(EXERCISE_EMOJIS)]
+
+                if goal:
+                    card_text = f"{emoji} {exercise}\n{goal}"
+                else:
+                    card_text = f"{emoji} {exercise}"
+
+                markup = types.InlineKeyboardMarkup()
+                btn_select = types.InlineKeyboardButton(
+                    "Выбрать",
+                    callback_data=f"ex_select:{idx}"
+                )
+                markup.add(btn_select)
+
+                await bot.send_message(chat_id, card_text, reply_markup=markup)
+
+    except Exception as e:
+        print(f"Error handling exercise continue after safety: {e}")
         await bot.answer_callback_query(callback_query.id)

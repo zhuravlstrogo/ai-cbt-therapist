@@ -444,6 +444,23 @@ async def handle_mark_exercise_complete(call):
     await exercise.handle_mark_exercise_complete(bot, call)
 
 
+# Safety continue callbacks
+@bot.callback_query_handler(func=lambda call: call.data.startswith('goal_continue:'))
+async def handle_goal_continue(call):
+    """Handle continuing goal setting after safety check"""
+    parts = call.data.split(':')
+    if len(parts) == 2:
+        step = parts[1]
+        await goal.handle_goal_callback(bot, call, "continue", step)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith('exercise_continue:'))
+async def handle_exercise_continue(call):
+    """Handle continuing exercise after safety check"""
+    import exercise
+    await exercise.handle_exercise_continue_after_safety(bot, call)
+
+
 # Other problem callbacks
 @bot.callback_query_handler(func=lambda call: call.data.startswith('other_suggest:'))
 async def handle_other_suggest(call):

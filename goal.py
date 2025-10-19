@@ -178,6 +178,42 @@ async def handle_goal_text_input(bot, message):
         goal_text = message.text
         state['goal'] = goal_text
 
+        # Check for crisis indicators in goal text
+        from safety_check import check_text_safety, show_crisis_support, log_crisis_detection
+        from greeting import user_states
+
+        crisis_detected, crisis_type, confidence = await check_text_safety(
+            text=goal_text,
+            context="goal_setting"
+        )
+
+        if crisis_detected and crisis_type:
+            # Log crisis detection
+            await log_crisis_detection(
+                user_id=user_id,
+                username=username,
+                crisis_type=crisis_type,
+                context="goal_setting",
+                text_sample=goal_text[:200],
+                file_path='messages.xlsx'
+            )
+
+            # Get user name
+            user_name = 'Друг'
+            if user_id in user_states:
+                user_name = user_states[user_id].get('user_name', 'Друг')
+
+            # Show crisis support
+            await show_crisis_support(
+                bot=bot,
+                chat_id=message.chat.id,
+                user_name=user_name,
+                crisis_type=crisis_type,
+                context="goal_setting",
+                continue_after=True  # Allow continuing with goal setting
+            )
+            return
+
         # Show preview with action buttons
         markup = types.InlineKeyboardMarkup()
 
@@ -285,6 +321,33 @@ async def handle_goal_callback(bot, callback_query, action, step):
             # Clean up state
             del user_goal_states[user_id]
             await show_main_menu(bot, chat_id, user_id, username, user_name, form_of_address)
+        
+        elif action == "continue" and step == "after_safety":
+            # Continue goal setting after safety check
+            await bot.answer_callback_query(callback_query.id)
+            
+            # Show preview with action buttons (continue from where we left off)
+            markup = types.InlineKeyboardMarkup()
+
+            btn_confirm = types.InlineKeyboardButton(
+                "✅ Подтвердить цель",
+                callback_data="goal_confirm:step1"
+            )
+            btn_edit = types.InlineKeyboardButton(
+                "✏️ Изменить",
+                callback_data="goal_edit:step1"
+            )
+            btn_back = types.InlineKeyboardButton(
+                "⬅️ Вернуться",
+                callback_data="goal_back:step1"
+            )
+
+            markup.add(btn_confirm)
+            markup.add(btn_edit)
+            markup.add(btn_back)
+
+            preview_text = f"📝 Твоя цель:\n\n{state['goal']}"
+            await bot.send_message(chat_id, preview_text, reply_markup=markup)
 
     except Exception as e:
         print(f"Error handling goal callback: {e}")

@@ -403,6 +403,21 @@ def register_safety_handlers(bot):
                 )
 
                 markup = types.InlineKeyboardMarkup()
+                
+                # Add context-specific continue buttons
+                if context == "goal_setting":
+                    btn_continue = types.InlineKeyboardButton(
+                        "➡️ Продолжить постановку цели",
+                        callback_data="goal_continue:after_safety"
+                    )
+                    markup.add(btn_continue)
+                elif context == "exercise":
+                    btn_continue = types.InlineKeyboardButton(
+                        "➡️ Продолжить упражнение",
+                        callback_data="exercise_continue:after_safety"
+                    )
+                    markup.add(btn_continue)
+                
                 btn_menu = types.InlineKeyboardButton(
                     "📱 Главное меню",
                     callback_data="menu:show"
