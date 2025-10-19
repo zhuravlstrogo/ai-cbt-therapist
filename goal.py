@@ -18,20 +18,21 @@ EXCEL_FILE = 'messages.xlsx'
 user_goal_states = {}
 
 # List of problems for step 2
+# IMPORTANT: These names must match EXACTLY with the headers in protocol_and_interventions_map.md
 PROBLEMS = [
     ("😟 Тревога, беспокойство", "anxiety"),
-    ("😞 Потеря интереса, апатия", "apathy"),
+    ("😞 Потеря интереса, апатия / Сниженное настроение", "apathy"),
     ("Пониженное настроение", "mood"),
     ("💤 Проблемы со сном", "sleep"),
-    ("⏳ Прокрастинация, снижение мотивации", "procrastination"),
+    ("⏳ Прокрастинация, снижение сил/мотивации", "procrastination"),
     ("💬 Трудности в общении", "communication"),
     ("💔 Самокритичность, чувство вины", "self_criticism"),
     ("😤 Раздражительность, вспышки гнева", "anger"),
-    ("Навязчивые мысли/действия", "ocd"),
+    ("🌀 Навязчивые мысли, действия (ОКР)", "ocd"),
     ("💥 Панические атаки", "panic"),
-    ("🎭 Неуверенность в компаниях людей", "social_anxiety"),
+    ("🎭 Неуверенность в компаниях людей (социальная тревога)", "social_anxiety"),
     ("🎯 Перфекционизм", "perfectionism"),
-    ("🌻 Переживание утраты/перемен", "loss"),
+    ("🌻 Переживание утраты / жизненные перемены", "loss"),
     ("🔄 Стресс, усталость, выгорание", "burnout"),
     ("💡 Хочу укрепить устойчивость", "resilience"),
     ("➕ Другая проблема", "other"),
@@ -92,18 +93,21 @@ async def start_goal_setting(bot, chat_id, user_id, username, skip_goal=False, f
         existing_problems = None
         existing_ratings = None
 
-        if user_id in user_states and 'goal' in user_states[user_id]:
-            existing_goal = user_states[user_id]['goal']
+        if user_id in user_states:
+            existing_goal = user_states[user_id].get('goal')
             existing_problems = user_states[user_id].get('problems', [])
             existing_ratings = user_states[user_id].get('problem_ratings', {})
+            print(f"DEBUG: Loaded existing data - goal: {existing_goal}, problems: {existing_problems}, ratings: {existing_ratings}")
 
             # If not forcing change, skip goal if it exists
-            if not force_change_goal and not force_change_problems:
+            if not force_change_goal and not force_change_problems and existing_goal:
                 skip_goal = True
 
         # Initialize user state
         initial_step = 1 if not skip_goal else (3 if force_change_problems else 2)
 
+        # When changing only goal, preserve existing problems
+        # When changing only problems, preserve existing goal
         user_goal_states[user_id] = {
             'step': initial_step,
             'username': username,
@@ -111,8 +115,11 @@ async def start_goal_setting(bot, chat_id, user_id, username, skip_goal=False, f
             'problems': [] if force_change_problems else (existing_problems or []),
             'problem_ratings': {} if force_change_problems else (existing_ratings or {}),
             'current_problem_idx': 0,
-            'is_changing': force_change_goal or force_change_problems
+            'is_changing': force_change_goal or force_change_problems,
+            'change_type': 'goal' if force_change_goal else ('problems' if force_change_problems else None)
         }
+
+        print(f"DEBUG: User state initialized - problems: {user_goal_states[user_id]['problems']}, change_type: {user_goal_states[user_id]['change_type']}, is_changing: {user_goal_states[user_id]['is_changing']}")
 
         if force_change_goal:
             # Force change goal - clear it and ask for new one
@@ -212,10 +219,47 @@ async def handle_goal_callback(bot, callback_query, action, step):
         state = user_goal_states[user_id]
 
         if action == "confirm" and step == "step1":
-            # Move to step 2: problem selection
-            state['step'] = 2
-            await bot.answer_callback_query(callback_query.id)
-            await show_problem_selection(bot, chat_id, user_id)
+            # Check if this is a change-only-goal operation
+            print(f"DEBUG: Confirm goal - is_changing: {state.get('is_changing')}, change_type: {state.get('change_type')}, problems: {state.get('problems')}")
+            if state.get('is_changing') and state.get('change_type') == 'goal':
+                # User is only changing goal
+                # Just save the goal and return to menu (regardless of existing problems)
+                print("DEBUG: Only changing goal, saving and returning to menu")
+                await bot.answer_callback_query(callback_query.id, "Цель сохранена!")
+                
+                # Save only the goal
+                from greeting import user_states
+                if user_id not in user_states:
+                    user_states[user_id] = {}
+                
+                user_states[user_id]['goal'] = state['goal']
+                
+                # Show confirmation and return to main menu
+                from universal_menu import show_main_menu
+                
+                user_name = 'User'
+                form_of_address = 'ты'
+                if user_id in user_states:
+                    user_name = user_states[user_id].get('user_name', 'User')
+                    form_of_address = user_states[user_id].get('form', 'ты')
+                
+                # Show confirmation with menu button
+                from universal_menu import get_menu_button
+                markup = get_menu_button()
+                
+                await bot.send_message(
+                    chat_id,
+                    f"✅ Цель сохранена: {state['goal']}",
+                    reply_markup=markup
+                )
+                
+                # Clean up state
+                del user_goal_states[user_id]
+            else:
+                # Normal flow - move to step 2: problem selection
+                state['step'] = 2
+                await bot.answer_callback_query(callback_query.id)
+                await show_problem_selection(bot, chat_id, user_id)
 
         elif action == "edit" and step == "step1":
             # Ask for new goal
@@ -260,22 +304,7 @@ async def show_problem_selection(bot, chat_id, user_id):
 
         markup = types.InlineKeyboardMarkup()
 
-        # Add problem buttons (2 per row for better layout)
-        for i, (display_name, problem_id) in enumerate(PROBLEMS):
-            # Create callback data with problem ID to avoid length issues
-            btn = types.InlineKeyboardButton(
-                display_name,
-                callback_data=f"prob_select:{problem_id}"
-            )
-            # Add 2 buttons per row, except last button if odd number
-            if (i + 1) % 2 == 1:
-                markup.add(btn)
-            else:
-                # Need to get last button from previous row and add together
-                # Instead, we'll handle this differently - add all in single column
-                pass
-
-        # Simpler approach: add buttons one per row, with continue button at end
+        # Add problem buttons one per row for clarity
         for display_name, problem_id in PROBLEMS:
             btn = types.InlineKeyboardButton(
                 display_name,
@@ -307,6 +336,8 @@ async def handle_problem_selection(bot, callback_query, problem_id):
     """Handle problem selection toggle"""
     try:
         user_id = callback_query.from_user.id
+        username = callback_query.from_user.username or 'Unknown'
+        chat_id = callback_query.message.chat.id
 
         # Answer callback IMMEDIATELY to avoid timeout
         await bot.answer_callback_query(callback_query.id, show_alert=False)
@@ -317,6 +348,20 @@ async def handle_problem_selection(bot, callback_query, problem_id):
         state = user_goal_states[user_id]
 
         if state['step'] != 2:
+            return
+
+        # Check if user selected "other" problem
+        if problem_id == "other":
+            # Import and start other problem flow
+            from other_problem import start_other_problem_flow
+            success = await start_other_problem_flow(bot, chat_id, user_id, username)
+            if success:
+                # Hide current problem selection interface temporarily
+                await bot.edit_message_text(
+                    "Переходим к описанию проблемы...",
+                    chat_id,
+                    callback_query.message.message_id
+                )
             return
 
         # Find the problem display name
@@ -334,6 +379,49 @@ async def handle_problem_selection(bot, callback_query, problem_id):
             state['problems'].remove(problem_display)
         else:
             state['problems'].append(problem_display)
+
+        # Update the message to show selected problems with checkmarks
+        text = "Выбери проблемы, над которыми хочешь работать (можно несколько):\n\n"
+        if state['problems']:
+            text += "✅ Выбрано:\n"
+            for prob in state['problems']:
+                text += f"• {prob}\n"
+
+        markup = types.InlineKeyboardMarkup()
+
+        # Add problem buttons with checkmarks for selected ones
+        for display_name, p_id in PROBLEMS:
+            if display_name in state['problems']:
+                btn_text = f"✅ {display_name}"
+            else:
+                btn_text = display_name
+            btn = types.InlineKeyboardButton(
+                btn_text,
+                callback_data=f"prob_select:{p_id}"
+            )
+            markup.add(btn)
+
+        # Add continue button
+        btn_continue = types.InlineKeyboardButton(
+            "➡️ Продолжить",
+            callback_data="prob_done:proceed"
+        )
+        markup.add(btn_continue)
+
+        # Add menu button
+        btn_menu = types.InlineKeyboardButton(
+            "📱 Главное меню",
+            callback_data="menu:show"
+        )
+        markup.add(btn_menu)
+
+        # Update the message with new markup
+        await bot.edit_message_text(
+            text,
+            chat_id,
+            callback_query.message.message_id,
+            reply_markup=markup
+        )
 
     except Exception as e:
         print(f"Error handling problem selection: {e}")
@@ -527,13 +615,31 @@ async def show_final_preview(bot, chat_id, user_id, username):
 
         problems_list = "\n".join(problems_text) if problems_text else "Проблемы не выбраны"
 
-        # Create final preview message
-        preview_message = (
-            f"🧾 Вот как я вижу твою ситуацию, {user_name}:\n\n"
-            f"Трудности и их оценка:\n{problems_list}\n\n"
-            f"Цель терапии: {state['goal']}\n\n"
-            f"Всё верно?"
-        )
+        # Customize message based on what was changed
+        change_type = state.get('change_type')
+        if change_type == 'goal':
+            # Only goal was changed
+            preview_message = (
+                f"🎯 Обновлённая цель терапии:\n\n"
+                f"{state['goal']}\n\n"
+                f"Твои текущие трудности:\n{problems_list}\n\n"
+                f"Всё верно?"
+            )
+        elif change_type == 'problems':
+            # Only problems were changed
+            preview_message = (
+                f"🧭 Обновлённые трудности и их оценка:\n{problems_list}\n\n"
+                f"Твоя цель терапии:\n{state['goal']}\n\n"
+                f"Всё верно?"
+            )
+        else:
+            # Normal flow or both changed
+            preview_message = (
+                f"🧾 Вот как я вижу твою ситуацию, {user_name}:\n\n"
+                f"Трудности и их оценка:\n{problems_list}\n\n"
+                f"Цель терапии: {state['goal']}\n\n"
+                f"Всё верно?"
+            )
 
         # Create buttons
         markup = types.InlineKeyboardMarkup()
@@ -627,10 +733,16 @@ async def handle_preview_change(bot, callback_query, change_type):
 
         state = user_goal_states[user_id]
 
+        # Preserve the original change intent
+        original_change_type = state.get('change_type')
+
         if change_type == "goal":
             # Go back to step 1 - ask for new goal
             state['step'] = 1
             state['goal'] = ''
+            # If originally changing only problems, now changing both
+            if original_change_type == 'problems':
+                state['change_type'] = None  # Now changing both
             from universal_menu import get_menu_button
             markup = get_menu_button()
             await bot.send_message(chat_id, "Введи новую цель терапии:", reply_markup=markup)
@@ -640,6 +752,9 @@ async def handle_preview_change(bot, callback_query, change_type):
             state['step'] = 2
             state['problems'] = []
             state['problem_ratings'] = {}
+            # If originally changing only goal, now changing both
+            if original_change_type == 'goal':
+                state['change_type'] = None  # Now changing both
             await show_problem_selection(bot, chat_id, user_id)
 
     except Exception as e:

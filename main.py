@@ -501,6 +501,10 @@ async def main():
     # Initialize weekly check-in scheduler
     await schedule_weekly_checkins(bot)
 
+    # Register safety handlers
+    from safety_check import register_safety_handlers
+    register_safety_handlers(bot)
+
     await bot.infinity_polling()
 
 
