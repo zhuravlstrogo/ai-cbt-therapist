@@ -12,7 +12,7 @@ from openpyxl import load_workbook, Workbook
 from telebot import types
 
 # Store user states to track where they are in the greeting process
-# Format: {user_id: {'stage': 'awaiting_form_choice'|'awaiting_name'|'ready_to_start', 'form': 'ты'|'Вы', 'user_name': str}}
+# Format: {user_id: {'stage': 'awaiting_consent'|'awaiting_form_choice'|'awaiting_name'|'ready_to_start', 'form': 'ты'|'Вы', 'user_name': str}}
 user_states = {}
 
 # Excel file path
@@ -153,16 +153,42 @@ def save_protocol_choice_to_excel(user_id, username, protocol_choice):
 
 
 async def send_greeting_messages(bot, chat_id, user_id, username):
-    """Send initial greeting message with form of address selection"""
+    """Send initial greeting message with consent confirmation"""
     try:
         # Always send greeting text
         greeting_text = (
-            "Привет 👋\n\n"
-            "Я — твой ИИ-психолог, работающий по принципам когнитивно-поведенческой терапии (КБТ).\n"
-            "Моя задача — помочь тебе разобраться с трудностями, изменить автоматические мысли "
-            "и подобрать упражнения, которые реально работают.\n\n"
-            "Как я могу к тебе обращаться — на ты или на Вы?"
+            "Привет 👋 Aide – твой ИИ-помощник, работающий в рамках методов когнитивно-поведенческой терапии (КПТ).\n\n"
+            "Кратко о подходе 📘\n"
+            "КПТ — доказательный метод психологической помощи. Мы будем выявлять мысли и поведенческие привычки, которые поддерживают дискомфорт, и системно менять их с помощью структурированных упражнений и коротких практик. Я объясняю шаги простым языком и предлагаю техники, которые можно применять в повседневной жизни 🧭\n\n"
+            "⚠️ Важно:\n"
+            "Aide не является заменой профессиональной психотерапевтической помощи, не предназначен для лечения тяжелых расстройств и помощи в критических, жизнеугрожающих ситуациях, а также не предназначена для помощи людям младше 18 лет.\n\n"
+            "Конфиденциальность 🔒\n"
+            "Информация, которую ты сообщаешь в чате, надежно защищена и не предназначена для передачи третьим лицам.\n\n"
+            "Если условия понятны и подходят, пожалуйста, подтверди согласие, и мы начнём работу ✅"
         )
+
+        # Create inline keyboard with consent confirmation
+        markup = types.InlineKeyboardMarkup()
+        btn_consent = types.InlineKeyboardButton(
+            "Да, все понятно",
+            callback_data="consent_confirmed"
+        )
+        markup.add(btn_consent)
+
+        await bot.send_message(chat_id, greeting_text, reply_markup=markup)
+
+        # Set user state to awaiting consent confirmation
+        user_states[user_id] = {'stage': 'awaiting_consent'}
+
+        print(f"Greeting message with consent request sent to user {username} (ID: {user_id})")
+    except Exception as e:
+        print(f"Error sending greeting messages: {e}")
+
+
+async def ask_for_form_of_address(bot, chat_id, user_id, username):
+    """Ask user for form of address after consent is confirmed"""
+    try:
+        form_question = "Отлично! Как я могу к тебе обращаться?"
 
         # Create inline keyboard with form of address options
         markup = types.InlineKeyboardMarkup()
@@ -177,14 +203,14 @@ async def send_greeting_messages(bot, chat_id, user_id, username):
         markup.add(btn_ty)
         markup.add(btn_vy)
 
-        await bot.send_message(chat_id, greeting_text, reply_markup=markup)
+        await bot.send_message(chat_id, form_question, reply_markup=markup)
 
         # Set user state to awaiting form choice
         user_states[user_id] = {'stage': 'awaiting_form_choice'}
 
-        print(f"Greeting message with form choice sent to user {username} (ID: {user_id})")
+        print(f"Form of address question sent to user {username}")
     except Exception as e:
-        print(f"Error sending greeting messages: {e}")
+        print(f"Error asking for form of address: {e}")
 
 
 async def ask_for_user_name(bot, chat_id, user_id, username, form_of_address):
@@ -253,6 +279,31 @@ async def send_motivation_message(bot, chat_id, user_id, username, form_of_addre
         print(f"Motivation message sent to user {username}")
     except Exception as e:
         print(f"Error sending motivation message: {e}")
+
+
+async def handle_consent_confirmation(bot, callback_query, user_id, username):
+    """Handle consent confirmation"""
+    try:
+        choice = callback_query.data
+
+        if choice == "consent_confirmed":
+            # Save consent confirmation to Excel
+            save_form_of_address_to_excel(user_id, username, 'consent_confirmed')
+
+            # Answer callback and ask for form of address
+            await bot.answer_callback_query(callback_query.id)
+            print(f"DEBUG: About to ask for form of address for user {username}")
+            await ask_for_form_of_address(bot, callback_query.message.chat.id, user_id, username)
+
+            print(f"Consent confirmed for user {username}")
+        else:
+            response = "Неизвестный выбор. Пожалуйста, выберите один из предложенных вариантов."
+            await bot.answer_callback_query(callback_query.id)
+            await bot.send_message(callback_query.message.chat.id, response)
+            return
+
+    except Exception as e:
+        print(f"Error handling consent confirmation: {e}")
 
 
 async def handle_form_of_address_choice(bot, callback_query, user_id, username):

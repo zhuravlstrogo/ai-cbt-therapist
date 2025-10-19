@@ -12,6 +12,7 @@ from greeting import (
     send_greeting_messages,
     handle_name_input,
     handle_form_of_address_choice,
+    handle_consent_confirmation,
     handle_ready_to_start,
     reset_user_greeting_state,
     user_states,
@@ -228,21 +229,43 @@ async def handle_voice(message):
         transcribed_text = await process_voice_message(message)
         username = message.from_user.username or 'Unknown'
 
-        from universal_menu import get_menu_button
-        markup = get_menu_button()
-
         if transcribed_text:
             print(f"Voice message from {username} transcribed to: {transcribed_text}")
             save_message_to_excel(username, transcribed_text, message.from_user.id, 'voice_message')
-            await bot.send_message(message.chat.id, f"Распознано голосовое сообщение: {transcribed_text}", reply_markup=markup)
+            
+            # Create a mock message object with transcribed text to pass to handle_text
+            class MockMessage:
+                def __init__(self, original_message, text):
+                    self.text = text
+                    self.chat = original_message.chat
+                    self.from_user = original_message.from_user
+                    self.message_id = original_message.message_id
+                    self.date = original_message.date
+            
+            # Create mock message and pass it to handle_text
+            mock_message = MockMessage(message, transcribed_text)
+            await handle_text(mock_message)
+            
         else:
             print(f"Error transcribing voice message from {username}")
+            from universal_menu import get_menu_button
+            markup = get_menu_button()
             await bot.send_message(message.chat.id, "Ошибка при распознавании голосового сообщения", reply_markup=markup)
     except Exception as e:
         print(f"Error handling voice message: {e}")
         from universal_menu import get_menu_button
         markup = get_menu_button()
         await bot.send_message(message.chat.id, "Произошла ошибка при обработке голосового сообщения", reply_markup=markup)
+
+
+@bot.callback_query_handler(func=lambda call: call.data == 'consent_confirmed')
+async def handle_consent_confirmation_callback(call):
+    """Handle consent confirmation button click"""
+    user_id = call.from_user.id
+    username = call.from_user.username or 'Unknown'
+
+    # Process the consent confirmation
+    await handle_consent_confirmation(bot, call, user_id, username)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('form_address:'))
