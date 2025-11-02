@@ -21,15 +21,13 @@ from greeting import (
 import goal
 import universal_menu
 from diary import init_diary_file, handle_diary_entry
+from config import TELEGRAM_API_KEY
 
 # Load environment variables
 load_dotenv()
 
 # Initialize bot
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN not found in environment variables. Please create a .env file with BOT_TOKEN=your_token")
-bot = AsyncTeleBot(BOT_TOKEN)
+bot = AsyncTeleBot(TELEGRAM_API_KEY)
 
 # Initialize speech recognizer
 recognizer = sr.Recognizer()
