@@ -7,7 +7,7 @@
 В файле `config.py` найдите строку:
 
 ```python
-TELEGRAM_API_KEY = '8402546664:AAHGU--------eqxrWE6jdkVXxtZFczDQ'
+TELEGRAM_API_KEY = '8402546664:AAHGUAAHGUAAHGUeqxrWE6jdkVXxtZFczDQ'
 ```
 
 Замените значение на ваш токен:
@@ -27,7 +27,7 @@ TELEGRAM_API_KEY = 'ваш_токен_здесь'
 
 **Пример:**
 ```python
-TELEGRAM_API_KEY = '123456789:AB-------StUvWxYz1a2b3c4d5e'
+TELEGRAM_API_KEY = '123456789:ABAAHGUAAHGUStUvWxYz1a2b3c4d5e'
 ```
 
 ## 🚀 Обновление OPENROUTER_API_KEY
@@ -35,7 +35,7 @@ TELEGRAM_API_KEY = '123456789:AB-------StUvWxYz1a2b3c4d5e'
 В файле `config.py` найдите строку:
 
 ```python
-OPENROUTER_API_KEY='sk-or-v1-2a00000009057fa04ad-------1a3000000f4efa547d'
+OPENROUTER_API_KEY='sk-or-v1-2a00000009057fa04ad57fa04ad1a3000000f4efa547d'
 ```
 
 Замените значение на ваш API ключ с OpenRouter:
@@ -55,7 +55,7 @@ OPENROUTER_API_KEY='ваш_api_ключ_здесь'
 
 **Пример:**
 ```python
-OPENROUTER_API_KEY = 'sk-or-v1-abc123def456ghi789jkl012mno345pqr'
+OPENROUTER_API_KEY = 'sk-or-v1-abc123def456gh7fa04ad1al012mno345pqr'
 ```
 
 ### ⚠️ Важные замечания
